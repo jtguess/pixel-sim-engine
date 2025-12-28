@@ -1,0 +1,26 @@
+build/
+cmake-build-*/
+out/
+
+# vcpkg
+vcpkg/buildtrees/
+vcpkg/packages/
+vcpkg/installed/
+vcpkg/downloads/
+
+!vcpkg/.gitmodules
+!vcpkg/bootstrap-vcpkg.sh
+!vcpkg/README.md
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+
+# mac
+.DS_Store
+
+# other
+cache/
+.cache/

@@ -1,0 +1,8 @@
+{
+  "name": "pixel-sim-engine",
+  "version": "0.1.0",
+  "dependencies": [
+    "sdl2",
+    "bgfx"
+  ]
+}
