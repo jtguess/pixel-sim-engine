@@ -25,6 +25,79 @@ add_executable(engine
   src/main.cpp
 )
 
+
+# ---- bgfx shader compilation (Metal for macOS) ----
+set(SHADER_SRC_DIR "${CMAKE_SOURCE_DIR}/shaders")
+set(SHADER_BIN_DIR "${CMAKE_SOURCE_DIR}/shaders/bin")
+file(MAKE_DIRECTORY "${SHADER_BIN_DIR}")
+
+# Try to locate shaderc from vcpkg.
+# vcpkg toolchain often sets VCPKG_INSTALLED_DIR; fallback to repo-local vcpkg installed.
+if (DEFINED VCPKG_INSTALLED_DIR)
+  set(_vcpkg_installed "${VCPKG_INSTALLED_DIR}")
+else()
+  set(_vcpkg_installed "${CMAKE_SOURCE_DIR}/vcpkg/installed")
+endif()
+
+# Triplet folder name differs (arm64-osx / x64-osx). Search it.
+find_program(SHADERC_EXECUTABLE shaderc
+  PATHS
+    "${_vcpkg_installed}/arm64-osx/tools/bgfx"
+    "${_vcpkg_installed}/x64-osx/tools/bgfx"
+    "${_vcpkg_installed}/arm64-osx/tools/bgfx/shaderc"
+    "${_vcpkg_installed}/x64-osx/tools/bgfx/shaderc"
+  NO_DEFAULT_PATH
+)
+
+# If not found in the above, fall back to PATH search (some installs put it on PATH)
+if (NOT SHADERC_EXECUTABLE)
+  find_program(SHADERC_EXECUTABLE shaderc)
+endif()
+
+if (NOT SHADERC_EXECUTABLE)
+  message(FATAL_ERROR "bgfx shaderc not found. Check vcpkg bgfx tools install.")
+endif()
+
+set(BLIT_VS "${SHADER_SRC_DIR}/blit.vs.sc")
+set(BLIT_FS "${SHADER_SRC_DIR}/blit.fs.sc")
+
+set(BLIT_VS_BIN "${SHADER_BIN_DIR}/vs_blit.bin")
+set(BLIT_FS_BIN "${SHADER_BIN_DIR}/fs_blit.bin")
+
+add_custom_command(
+  OUTPUT "${BLIT_VS_BIN}"
+  COMMAND "${SHADERC_EXECUTABLE}"
+          -f "${BLIT_VS}"
+          -o "${BLIT_VS_BIN}"
+          --platform osx
+          --type vertex
+          --profile metal
+          -i "${_vcpkg_installed}/arm64-osx/include/bgfx" # ok if missing; shaderc has its own includes too
+          -i "${_vcpkg_installed}/x64-osx/include/bgfx"
+  DEPENDS "${BLIT_VS}"
+  VERBATIM
+)
+
+add_custom_command(
+  OUTPUT "${BLIT_FS_BIN}"
+  COMMAND "${SHADERC_EXECUTABLE}"
+          -f "${BLIT_FS}"
+          -o "${BLIT_FS_BIN}"
+          --platform osx
+          --type fragment
+          --profile metal
+          -i "${_vcpkg_installed}/arm64-osx/include/bgfx"
+          -i "${_vcpkg_installed}/x64-osx/include/bgfx"
+  DEPENDS "${BLIT_FS}"
+  VERBATIM
+)
+
+add_custom_target(shaders ALL
+  DEPENDS "${BLIT_VS_BIN}" "${BLIT_FS_BIN}"
+)
+
+add_dependencies(engine shaders)
+
 # SDL: vcpkg typically provides SDL2::SDL2 target
 target_link_libraries(engine PRIVATE
   SDL2::SDL2
