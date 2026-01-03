@@ -1,3 +1,6 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/microsoft/vcpkg.git
+[submodule "third_party/bgfx.cmake"]
+	path = third_party/bgfx.cmake
+	url = https://github.com/bkaradzic/bgfx.cmake

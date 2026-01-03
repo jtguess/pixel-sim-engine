@@ -1,4 +1,7 @@
 build/
+build-debug/
+build-*/
+build_bgfx_tools/
 cmake-build-*/
 out/
 
@@ -7,6 +10,7 @@ vcpkg/buildtrees/
 vcpkg/packages/
 vcpkg/installed/
 vcpkg/downloads/
+vcpkg_installed/
 
 !vcpkg/.gitmodules
 !vcpkg/bootstrap-vcpkg.sh
@@ -20,6 +24,9 @@ compile_commands.json
 
 # mac
 .DS_Store
+
+# shaders
+shaders/bin/
 
 # other
 cache/
