@@ -51,11 +51,22 @@ set(ENGINE_SOURCES
     src/main.cpp
     src/TextureManager.cpp
     src/SpriteBatch.cpp
+    src/Scene.cpp
+    src/SailingScene.cpp
+    src/PortScene.cpp
+    src/ParallaxLayer.cpp
+    src/OceanSystem.cpp
 )
 
 set(ENGINE_HEADERS
     include/TextureManager.h
     include/SpriteBatch.h
+    include/Animation.h
+    include/Scene.h
+    include/SailingScene.h
+    include/PortScene.h
+    include/ParallaxLayer.h
+    include/OceanSystem.h
 )
 
 # ============================================

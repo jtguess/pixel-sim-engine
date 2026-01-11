@@ -1,13 +1,18 @@
 /*
- * main.cpp - Pixel Sim Engine with Animation System
+ * main.cpp - Pixel Sim Engine with Scene System
  * 
- * Step 4: Added Animation and AnimatedSprite for frame-based animations.
+ * Step 5: Added Scene and SceneManager for organizing game screens.
  * 
  * Architecture:
  *   - 640x360 offscreen canvas (pixel-perfect game rendering)
  *   - SpriteBatch for efficient batched 2D drawing
  *   - Animation system for sprite sheet animations
+ *   - Scene system for managing different game screens
  *   - Integer-scaled blit to window with letterboxing
+ * 
+ * Controls:
+ *   - SPACE or Click: Switch between scenes
+ *   - ESC: Quit
  */
 
 #include <SDL.h>
@@ -19,12 +24,16 @@
 #include "TextureManager.h"
 #include "SpriteBatch.h"
 #include "Animation.h"
+#include "Scene.h"
+#include "SailingScene.h"
+#include "PortScene.h"
 
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
 #include <vector>
 #include <fstream>
+#include <memory>
 
 // -------------------------
 // Constants
@@ -124,7 +133,7 @@ int main(int, char**) {
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "Pixel Sim Engine - Step 4 (Animation System)",
+        "Pixel Sim Engine - Step 5 (Scene System)",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1280, 720,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI
@@ -222,151 +231,41 @@ int main(int, char**) {
         return 1;
     }
 
-    // --- Create test sprite sheets ---
+    // --- Initialize scene system ---
+    SceneManager scenes;
     
-    // Rainbow animation (8 frames, default rainbow colors)
-    TextureHandle rainbowSheet = textures.createTestSpriteSheet("rainbow", 32, 32, 8);
-    
-    // Ship-like animation (simple boat shape that rocks)
-    TextureHandle shipSheet = textures.createTestSpriteSheet("ship", 48, 32, 6,
-        [](int frame, int x, int y) -> uint32_t {
-            // Create a simple boat shape
-            const int w = 48, h = 32;
-            const int centerX = w / 2;
-            
-            // Rock angle based on frame
-            float rock = std::sin(frame * 0.5f) * 0.15f;
-            
-            // Transform coordinates for rocking
-            int rx = x - centerX;
-            int ry = y - h / 2;
-            float cosR = std::cos(rock);
-            float sinR = std::sin(rock);
-            int tx = (int)(rx * cosR - ry * sinR) + centerX;
-            int ty = (int)(rx * sinR + ry * cosR) + h / 2;
-            
-            // Hull shape (bottom half, roughly boat-shaped)
-            bool inHull = (ty > h/2 - 4) && (ty < h - 4) && 
-                          (tx > 8 + (ty - h/2)) && (tx < w - 8 - (ty - h/2));
-            
-            // Cabin (small rectangle on top)
-            bool inCabin = (ty > h/2 - 10) && (ty < h/2) && 
-                           (tx > centerX - 8) && (tx < centerX + 8);
-            
-            // Mast
-            bool inMast = (tx > centerX - 2) && (tx < centerX + 2) && 
-                          (ty > 4) && (ty < h/2 - 4);
-            
-            // Flag (waves with frame)
-            int flagOffset = (frame % 3) - 1;
-            bool inFlag = (ty > 4) && (ty < 12) && 
-                          (tx > centerX + 2) && (tx < centerX + 12 + flagOffset);
-            
-            // Water line at bottom
-            bool inWater = (y > h - 6);
-            
-            if (inWater) {
-                // Animated water
-                int wave = (x + frame * 4) % 8;
-                if (wave < 4) return 0xFF4488CC; // Light blue
-                return 0xFF3366AA; // Darker blue
-            }
-            if (inHull) return 0xFF8B4513; // Brown
-            if (inCabin) return 0xFFDEB887; // Tan
-            if (inMast) return 0xFF654321; // Dark brown
-            if (inFlag) return 0xFFFF4444; // Red flag
-            
-            // Sky background gradient
-            float skyGrad = (float)y / h;
-            uint8_t skyB = (uint8_t)(200 + skyGrad * 55);
-            uint8_t skyG = (uint8_t)(180 + skyGrad * 40);
-            return 0xFF000000 | (skyB << 16) | (skyG << 8) | 0xFF; // Light blue sky
-        }
-    );
-
-    std::printf("Rainbow sheet: %dx%d, valid=%d\n", rainbowSheet.width, rainbowSheet.height, rainbowSheet.isValid());
-    std::printf("Ship sheet: %dx%d, valid=%d\n", shipSheet.width, shipSheet.height, shipSheet.isValid());
-    
-    // Pulsing orb animation
-    TextureHandle orbSheet = textures.createTestSpriteSheet("orb", 24, 24, 8,
-        [](int frame, int x, int y) -> uint32_t {
-            const int size = 24;
-            const int cx = size / 2;
-            const int cy = size / 2;
-            
-            float dx = (float)(x - cx);
-            float dy = (float)(y - cy);
-            float dist = std::sqrt(dx * dx + dy * dy);
-            
-            // Pulsing radius
-            float pulse = 8.0f + std::sin(frame * 0.8f) * 3.0f;
-            
-            if (dist < pulse) {
-                // Inside orb - gradient from center
-                float intensity = 1.0f - (dist / pulse) * 0.5f;
-                
-                // Color shifts with frame
-                float hue = frame * 45.0f; // Rotate through colors
-                float r = std::sin(hue * 0.0174533f) * 0.5f + 0.5f;
-                float g = std::sin((hue + 120) * 0.0174533f) * 0.5f + 0.5f;
-                float b = std::sin((hue + 240) * 0.0174533f) * 0.5f + 0.5f;
-                
-                return 0xFF000000 |
-                    ((uint32_t)(b * intensity * 255) << 16) |
-                    ((uint32_t)(g * intensity * 255) << 8) |
-                    (uint32_t)(r * intensity * 255);
-            }
-            
-            // Transparent outside
-            return 0x00000000;
-        }
-    );
-    
-    // Simple solid background
-    TextureHandle bgTex = textures.createSolidColor("bg", 30, 40, 60);
-    
-    // --- Create animations ---
-    Animation rainbowAnim = Animation::fromGrid(0, 0, 32, 32, 8, 0.1f, true);
-    Animation shipAnim = Animation::fromGrid(0, 0, 48, 32, 6, 0.15f, true);
-    Animation orbAnim = Animation::fromGrid(0, 0, 24, 24, 8, 0.08f, true);
-    
-    // --- Create animated sprites ---
-    AnimatedSprite rainbowSprite(rainbowSheet, rainbowAnim);
-    AnimatedSprite shipSprite(shipSheet, shipAnim);
-    AnimatedSprite orbSprite1(orbSheet, orbAnim);
-    AnimatedSprite orbSprite2(orbSheet, orbAnim);
-    AnimatedSprite orbSprite3(orbSheet, orbAnim);
-    
-    // Offset orb animations so they're not in sync
-    orbSprite2.setFrame(3);
-    orbSprite3.setFrame(6);
-    
-    // Different playback speeds
-    orbSprite1.setSpeed(1.0f);
-    orbSprite2.setSpeed(1.5f);
-    orbSprite3.setSpeed(0.7f);
+    // Start with the sailing scene
+    scenes.switchTo(std::make_unique<SailingScene>(textures));
 
     // View setup
-    bgfx::setViewClear(VIEW_GAME, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x1e3050ff, 1.0f, 0);
+    bgfx::setViewClear(VIEW_GAME, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
     bgfx::setViewClear(VIEW_BLIT, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x000000ff, 1.0f, 0);
 
     // Timing
-    float time = 0.0f;
     uint32_t frameCount = 0;
     Uint64 lastTicks = SDL_GetPerformanceCounter();
     const Uint64 frequency = SDL_GetPerformanceFrequency();
+    
+    std::printf("\n=== Pixel Sim Engine ===\n");
+    std::printf("Press SPACE or Click to switch scenes\n");
+    std::printf("Press ESC to quit\n\n");
     
     bool running = true;
     while (running) {
         Uint64 currentTicks = SDL_GetPerformanceCounter();
         float deltaTime = (float)(currentTicks - lastTicks) / (float)frequency;
         lastTicks = currentTicks;
-        time += deltaTime;
         
+        // Event handling
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            if (e.type == SDL_QUIT) running = false;
-            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) running = false;
+            if (e.type == SDL_QUIT) {
+                running = false;
+            }
+            
+            if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+                running = false;
+            }
 
             if (e.type == SDL_WINDOWEVENT &&
                 (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
@@ -375,14 +274,13 @@ int main(int, char**) {
                 if (backW <= 0 || backH <= 0) SDL_GetWindowSize(window, &backW, &backH);
                 bgfx::reset((uint32_t)backW, (uint32_t)backH, BGFX_RESET_VSYNC);
             }
+            
+            // Pass events to scene
+            scenes.handleEvent(e);
         }
 
-        // --- Update animations ---
-        rainbowSprite.update(deltaTime);
-        shipSprite.update(deltaTime);
-        orbSprite1.update(deltaTime);
-        orbSprite2.update(deltaTime);
-        orbSprite3.update(deltaTime);
+        // --- Update scene ---
+        scenes.update(deltaTime);
 
         // --- Render to game canvas ---
         bgfx::setViewFrameBuffer(VIEW_GAME, gameFbo);
@@ -391,39 +289,8 @@ int main(int, char**) {
         
         sprites.begin(VIEW_GAME, (uint16_t)GAME_W, (uint16_t)GAME_H);
         
-        // Draw tiled background
-        for (int y = 0; y < (int)GAME_H; y += 32) {
-            for (int x = 0; x < (int)GAME_W; x += 32) {
-                sprites.draw(bgTex, (float)x, (float)y, 32.0f, 32.0f);
-            }
-        }
-        // Draw animated sprites
-        
-        // Rainbow squares in a row
-        rainbowSprite.draw(sprites, 50, 50, 64, 64);
-        rainbowSprite.draw(sprites, 130, 50, 48, 48);
-        rainbowSprite.draw(sprites, 200, 50, 32, 32);
-        
-        // Ship sailing across (moves horizontally)
-        float shipX = std::fmod(time * 50.0f, GAME_W + 100) - 50;
-        shipSprite.draw(sprites, shipX, 150, 96, 64);
-        
-        // Floating orbs
-        float bobOffset1 = std::sin(time * 2.0f) * 10.0f;
-        float bobOffset2 = std::sin(time * 2.5f + 1.0f) * 10.0f;
-        float bobOffset3 = std::sin(time * 1.8f + 2.0f) * 10.0f;
-        
-        orbSprite1.draw(sprites, 400, 100 + bobOffset1, 48, 48);
-        orbSprite2.draw(sprites, 470, 120 + bobOffset2, 48, 48);
-        orbSprite3.draw(sprites, 540, 90 + bobOffset3, 48, 48);
-        
-        // Show current frame info
-        if (frameCount % 300 == 0) {
-            auto stats = sprites.getStats();
-            std::printf("[Frame %u] Sprites: %u, Draw calls: %u | Rainbow frame: %d, Ship frame: %d\n",
-                        frameCount, stats.spriteCount, stats.drawCalls,
-                        rainbowSprite.getCurrentFrame(), shipSprite.getCurrentFrame());
-        }
+        // Let the scene render
+        scenes.render(sprites);
         
         sprites.end();
 
@@ -453,6 +320,11 @@ int main(int, char**) {
 
         bgfx::frame();
         frameCount++;
+        
+        // Print FPS every 5 seconds
+        if (frameCount % 300 == 0) {
+            std::printf("[Frame %u] Running...\n", frameCount);
+        }
     }
 
     // Cleanup
@@ -468,5 +340,7 @@ int main(int, char**) {
 #endif
     SDL_DestroyWindow(window);
     SDL_Quit();
+    
+    std::printf("Goodbye!\n");
     return 0;
 }
